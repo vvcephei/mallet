@@ -1,3 +1,10 @@
+/* Copyright (C) 2011 Univ. of Massachusetts Amherst, Computer Science Dept.
+   This file is part of "MALLET" (MAchine Learning for LanguagE Toolkit).
+   http://www.cs.umass.edu/~mccallum/mallet
+   This software is provided under the terms of the Common Public License,
+   version 1.0, as published by http://www.opensource.org.  For further
+   information, see the file `LICENSE' included with this distribution. */
+
 package cc.mallet.fst.semi_supervised;
 
 import java.io.BufferedReader;
@@ -6,6 +13,12 @@ import java.util.Arrays;
 import java.util.HashMap;
 
 import cc.mallet.types.InstanceList;
+
+/**
+ * Expectation constraint utilities for fst package.
+ *
+ * @author Gregory Druck
+ */
 
 public class FSTConstraintUtil {
 
@@ -25,8 +38,10 @@ public class FSTConstraintUtil {
         // assume the feature name has no spaces
         String featureName = split[0];
         int featureIndex = data.getDataAlphabet().lookupIndex(featureName,false);
+        if (featureIndex == -1) { 
+          throw new RuntimeException("Feature " + featureName + " not found in the alphabet!");
+        }
         
-        assert(split.length - 1 == data.getTargetAlphabet().size()) : split.length + " " + data.getTargetAlphabet().size();
         double[][] probs = new double[data.getTargetAlphabet().size()][2];
         for (int i = 0; i < probs.length; i++) Arrays.fill(probs[i ],Double.NEGATIVE_INFINITY);
         for (int index = 1; index < split.length; index++) {

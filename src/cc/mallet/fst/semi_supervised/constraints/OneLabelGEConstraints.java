@@ -24,6 +24,8 @@ import cc.mallet.types.InstanceList;
  * A set of constraints on distributions over single
  * labels conditioned on the presence of input features.  
  * 
+ * Subclasses are to be used with GE.
+ * 
  * Multiple constraints are grouped together here
  * to make things more efficient.
  * 
@@ -169,6 +171,22 @@ public abstract class OneLabelGEConstraints implements GEConstraint {
       this.weight = weight;
       this.expectation = null;
       this.count = 0;
+    }
+    
+    public double getCount() {
+      return count;
+    }
+    
+    public double[] getTarget() {
+      return target;
+    }
+    
+    public double[] getExpectation() {
+      return expectation;
+    }
+    
+    public double getWeight() { 
+      return weight;
     }
     
     public abstract double getValue(int li);

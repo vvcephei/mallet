@@ -1,17 +1,23 @@
+/* Copyright (C) 2011 Univ. of Massachusetts Amherst, Computer Science Dept.
+   This file is part of "MALLET" (MAchine Learning for LanguagE Toolkit).
+   http://www.cs.umass.edu/~mccallum/mallet
+   This software is provided under the terms of the Common Public License,
+   version 1.0, as published by http://www.opensource.org.  For further
+   information, see the file `LICENSE' included with this distribution. */
+
 package cc.mallet.classify;
 
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.logging.Logger;
 
+import cc.mallet.classify.constraints.ge.MaxEntGEConstraint;
 import cc.mallet.optimize.Optimizable;
 import cc.mallet.types.FeatureVector;
 import cc.mallet.types.Instance;
 import cc.mallet.types.InstanceList;
 import cc.mallet.types.MatrixOps;
 import cc.mallet.util.MalletProgressMessageLogger;
-import cc.mallet.util.Maths;
 
 /**
  * Training of MaxEnt models with labeled features using
@@ -29,10 +35,11 @@ import cc.mallet.util.Maths;
  * @author gdruck
  *
  */
-public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientValue {
+public class MaxEntOptimizableByGE implements Optimizable.ByGradientValue {
+  
+  private static Logger progressLogger = MalletProgressMessageLogger.getLogger(MaxEntOptimizableByGE.class.getName()+"-pl");
   
   protected boolean cacheStale = true;
-  protected boolean useValues;
   protected int defaultFeatureIndex;
   protected double temperature;
   protected double objWeight;
@@ -42,16 +49,14 @@ public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientVal
   protected double[] parameters;
   protected InstanceList trainingList;
   protected MaxEnt classifier;
-  protected HashMap<Integer,double[]> constraints;
-  protected HashMap<Integer,Integer> mapping;
+  protected ArrayList<MaxEntGEConstraint> constraints;
   
   /**
    * @param trainingList List with unlabeled training instances.
    * @param constraints Feature expectation constraints.
    * @param initClassifier Initial classifier.
    */
-  public MaxEntOptimizableByGE(InstanceList trainingList, HashMap<Integer,double[]> constraints, MaxEnt initClassifier) {
-    useValues = false;
+  public MaxEntOptimizableByGE(InstanceList trainingList, ArrayList<MaxEntGEConstraint> constraints, MaxEnt initClassifier) {
     temperature = 1.0;
     objWeight = 1.0;
     gaussianPriorVariance = 1.0;
@@ -74,6 +79,10 @@ public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientVal
     }
     
      this.constraints = constraints;
+     
+     for (MaxEntGEConstraint constraint : constraints) {
+       constraint.preProcess(trainingList);
+     }
   } 
   
   /**
@@ -89,10 +98,11 @@ public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientVal
   
   
   /**
-   * Set the temperature, 1 / the exponent model predicted probabilities 
-   * are raised to when computing model expectations.  As the temperature
-   * increases, model probabilities approach 1 for the maximum probability
-   * class, and 0 for other classes.  DEFAULT: 1  
+   * Model probabilities are raised to the power 1/temperature and 
+   * renormalized. As the temperature decreases, model probabilities 
+   * approach 1 for the maximum probability class, and 0 for other classes. 
+   * 
+   * DEFAULT: 1  
    * 
    * @param temp Temperature.
    */
@@ -113,7 +123,92 @@ public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientVal
     return classifier;
   }
 
-  public abstract double getValue();
+  public double getValue() {
+    if (!cacheStale) {
+      return cachedValue;
+    }
+    
+    if (objWeight == 0) {
+      return 0.0;
+    }
+    
+    for (MaxEntGEConstraint constraint : constraints) {
+      constraint.zeroExpectations();
+    }
+    
+    Arrays.fill(cachedGradient,0);
+
+    int numFeatures = trainingList.getDataAlphabet().size() + 1;
+    int numLabels = trainingList.getTargetAlphabet().size();     
+
+    double[][] scores = new double[trainingList.size()][numLabels];
+    double[] constraintValue = new double[numLabels];
+    
+    // pass 1: calculate model distribution
+    for (int ii = 0; ii < trainingList.size(); ii++) {
+      Instance instance = trainingList.get(ii);
+      double instanceWeight = trainingList.getInstanceWeight(instance);
+      
+      // skip if labeled
+      if (instance.getTarget() != null) {
+        continue;
+      }
+      
+      FeatureVector fv = (FeatureVector) instance.getData();
+      classifier.getClassificationScoresWithTemperature(instance, temperature, scores[ii]);
+      for (MaxEntGEConstraint constraint : constraints) {
+        constraint.computeExpectations(fv,scores[ii],instanceWeight);
+      }
+    }
+    
+    // compute value
+    double value = 0;
+    for (MaxEntGEConstraint constraint : constraints) {
+      value += constraint.getValue();
+    }
+    value *= objWeight;
+
+    // pass 2: determine per example gradient
+    for (int ii = 0; ii < trainingList.size(); ii++) {
+      Instance instance = trainingList.get(ii);
+      
+      // skip if labeled
+      if (instance.getTarget() != null) {
+        continue;
+      }
+      
+      Arrays.fill(constraintValue,0);
+      double instanceExpectation = 0;
+      double instanceWeight = trainingList.getInstanceWeight(instance);
+      FeatureVector fv = (FeatureVector) instance.getData();
+
+      for (MaxEntGEConstraint constraint : constraints) {
+        constraint.preProcess(fv);
+        for (int label = 0; label < numLabels; label++) {
+          double val = constraint.getCompositeConstraintFeatureValue(fv, label);
+          constraintValue[label] += val; 
+          instanceExpectation += val * scores[ii][label];
+        }
+      }
+
+      for (int label = 0; label < numLabels; label++) {
+        if (scores[ii][label] == 0) continue;
+        assert (!Double.isInfinite(scores[ii][label]));
+        double weight = objWeight * instanceWeight * scores[ii][label] * (constraintValue[label] - instanceExpectation) / temperature;
+        assert(!Double.isNaN(weight));
+        MatrixOps.rowPlusEquals(cachedGradient, numFeatures, label, fv, weight);
+        cachedGradient[numFeatures * label + defaultFeatureIndex] += weight;
+      }  
+    }
+
+    cachedValue = value;
+    cacheStale = false;
+    
+    double reg = getRegularization();
+    progressLogger.info ("Value (GE=" + value + " Gaussian prior= " + reg + ") = " + cachedValue);
+    
+    return value;
+  }
 
   protected double getRegularization() {
     double regularization = 0;
@@ -131,13 +226,7 @@ public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientVal
       getValue();  
     }
     assert(buffer.length == cachedGradient.length);
-    for (int i = 0; i < buffer.length; i++) {
-      buffer[i] = cachedGradient[i];
-    }
-  }
-  
-  public void setUseValues(boolean flag) {
-    this.useValues = flag;
+    System.arraycopy (cachedGradient, 0, buffer, 0, buffer.length);
   }
 
   public int getNumParameters() {
@@ -162,16 +251,5 @@ public abstract class MaxEntOptimizableByGE implements Optimizable.ByGradientVal
     assert(params.length == parameters.length);
     cacheStale = true;
     System.arraycopy (params, 0, parameters, 0, parameters.length);
-  }
-  
-  protected void setMapping() {
-    int cCounter = 0;
-    mapping = new HashMap<Integer,Integer>();
-    Iterator<Integer> keys = constraints.keySet().iterator();
-    while (keys.hasNext()) {
-      int featureIndex = keys.next();
-      mapping.put(featureIndex, cCounter);
-      cCounter++;
-    }
   }
 }

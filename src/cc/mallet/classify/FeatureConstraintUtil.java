@@ -1,4 +1,4 @@
-/* Copyright (C) 2002 Univ. of Massachusetts Amherst, Computer Science Dept.
+/* Copyright (C) 2009 Univ. of Massachusetts Amherst, Computer Science Dept.
    This file is part of "MALLET" (MAchine Learning for LanguagE Toolkit).
    http://www.cs.umass.edu/~mccallum/mallet
    This software is provided under the terms of the Common Public License,
@@ -11,17 +11,15 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.logging.Logger;
 
-import cc.mallet.fst.TokenAccuracyEvaluator;
-import cc.mallet.topics.LDAHyper;
 import cc.mallet.topics.ParallelTopicModel;
 import cc.mallet.types.Alphabet;
 import cc.mallet.types.FeatureVector;
-import cc.mallet.types.IDSorter;
 import cc.mallet.types.InfoGain;
 import cc.mallet.types.Instance;
 import cc.mallet.types.InstanceList;
@@ -38,7 +36,75 @@ import cc.mallet.util.Maths;
 public class FeatureConstraintUtil {
   
 	private static Logger logger = MalletLogger.getLogger(FeatureConstraintUtil.class.getName());
-	
+  
+  /**
+   * Reads range constraints stored using strings from a file. Format can be either:
+   * 
+   * feature_name (label_name:lower_probability,upper_probability)+
+   * 
+   * or
+   * 
+   * feature_name (label_name:probability)+
+   * 
+   * Constraints are only added for feature-label pairs that are present.
+   * 
+   * @param filename File with feature constraints.
+   * @param data InstanceList used for alphabets.
+   * @return Constraints.
+   */
+  public static HashMap<Integer,double[][]> readRangeConstraintsFromFile(String filename, InstanceList data) { 
+    HashMap<Integer,double[][]> constraints = new HashMap<Integer,double[][]>();
+    
+    for (int li = 0; li < data.getTargetAlphabet().size(); li++) {
+      System.err.println(data.getTargetAlphabet().lookupObject(li));
+    }
+    
+    try {
+      BufferedReader reader = new BufferedReader(new FileReader(filename));
+      String line = reader.readLine();
+      while (line != null) {
+        String[] split = line.split("\\s+");
+        
+        // assume the feature name has no spaces
+        String featureName = split[0];
+        int featureIndex = data.getDataAlphabet().lookupIndex(featureName,false);
+        if (featureIndex == -1) { 
+          throw new RuntimeException("Feature " + featureName + " not found in the alphabet!");
+        }
+        
+        double[][] probs = new double[data.getTargetAlphabet().size()][2];
+        for (int i = 0; i < probs.length; i++) Arrays.fill(probs[i ],Double.NEGATIVE_INFINITY);
+        for (int index = 1; index < split.length; index++) {
+          String[] labelSplit = split[index].split(":");   
+          
+          int li = data.getTargetAlphabet().lookupIndex(labelSplit[0],false);
+          assert (li != -1) : labelSplit[0];
+          
+          if (labelSplit[1].contains(",")) {
+            String[] rangeSplit = labelSplit[1].split(",");
+            double lower = Double.parseDouble(rangeSplit[0]);
+            double upper = Double.parseDouble(rangeSplit[1]);
+            probs[li][0] = lower;
+            probs[li][1] = upper;
+          }
+          else {
+            double prob = Double.parseDouble(labelSplit[1]);
+            probs[li][0] = prob;
+            probs[li][1] = prob;
+          }
+        }
+        constraints.put(featureIndex, probs);
+        line = reader.readLine();
+      }
+    }
+    catch (Exception e) {  
+      e.printStackTrace();
+      System.exit(1);
+    }
+    return constraints;
+  }
+  
+  
   /**
    * Reads feature constraints from a file, whether they are stored
    * using Strings or indices.
@@ -80,11 +146,12 @@ public class FeatureConstraintUtil {
         String featureName = split[0];
         int featureIndex = data.getDataAlphabet().lookupIndex(featureName,false);
         
-        assert(split.length - 1 == data.getTargetAlphabet().size());
+        assert(split.length - 1 == data.getTargetAlphabet().size()) : split.length + " " + data.getTargetAlphabet().size();
         double[] probs = new double[split.length - 1];
         for (int index = 1; index < split.length; index++) {
           String[] labelSplit = split[index].split(":");   
           int li = data.getTargetAlphabet().lookupIndex(labelSplit[0],false);
+          assert(li != -1) : "Label " + labelSplit[0] + " not found";
           double prob = Double.parseDouble(labelSplit[1]);
           probs[li] = prob;
         }
@@ -399,7 +466,7 @@ public class FeatureConstraintUtil {
   	return labelFeatures(list,features,true);
   }
   
-  private static double[][] getFeatureLabelCounts(InstanceList list, boolean useValues) {
+  public static double[][] getFeatureLabelCounts(InstanceList list, boolean useValues) {
     int numFeatures = list.getDataAlphabet().size();
     int numLabels = list.getTargetAlphabet().size();
     

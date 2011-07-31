@@ -1,9 +1,9 @@
-/* Copyright (C) 2003 University of Pennsylvania.
+/* Copyright (C) 2011 Univ. of Massachusetts Amherst, Computer Science Dept.
    This file is part of "MALLET" (MAchine Learning for LanguagE Toolkit).
-http://www.cs.umass.edu/~mccallum/mallet
-This software is provided under the terms of the Common Public License,
-version 1.0, as published by http://www.opensource.org.  For further
-information, see the file `LICENSE' included with this distribution. */
+   http://www.cs.umass.edu/~mccallum/mallet
+   This software is provided under the terms of the Common Public License,
+   version 1.0, as published by http://www.opensource.org.  For further
+   information, see the file `LICENSE' included with this distribution. */
 
 package cc.mallet.fst.semi_supervised.tui;
 
@@ -34,6 +34,9 @@ import cc.mallet.fst.semi_supervised.FSTConstraintUtil;
 import cc.mallet.fst.semi_supervised.constraints.GEConstraint;
 import cc.mallet.fst.semi_supervised.constraints.OneLabelKLGEConstraints;
 import cc.mallet.fst.semi_supervised.constraints.OneLabelL2RangeGEConstraints;
+import cc.mallet.fst.semi_supervised.pr.CRFTrainerByPR;
+import cc.mallet.fst.semi_supervised.pr.constraints.OneLabelL2IndPRConstraints;
+import cc.mallet.fst.semi_supervised.pr.constraints.PRConstraint;
 import cc.mallet.pipe.Pipe;
 import cc.mallet.pipe.iterator.LineGroupIterator;
 import cc.mallet.types.Alphabet;
@@ -45,6 +48,9 @@ import cc.mallet.util.MalletLogger;
 import cc.mallet.util.Maths;
 
 /**
+ * Version of SimpleTagger that trains CRFs with expectation constraints
+ * rather than labeled data.
+ * 
  * This class's main method trains, tests, or runs a generic CRF-based
  * sequence tagger.
  * <p>
@@ -71,6 +77,10 @@ public class SimpleTaggerWithConstraints
     (SimpleTaggerWithConstraints.class, "gaussian-variance", "DECIMAL", true, 10.0,
      "The gaussian prior variance used for training.", null);
 
+  private static final CommandOption.Double qGaussianVarianceOption = new CommandOption.Double
+  (SimpleTaggerWithConstraints.class, "q-gaussian-variance", "DECIMAL", true, 10.0,
+   "The gaussian prior variance used in the E-step for PR training.", null);
+  
   private static final CommandOption.Boolean trainOption = new CommandOption.Boolean
     (SimpleTaggerWithConstraints.class, "train", "true|false", true, false,
      "Whether to train", null);
@@ -166,6 +176,7 @@ public class SimpleTaggerWithConstraints
         "Training, testing and running a generic tagger.",
         new CommandOption[] {
           gaussianVarianceOption,
+          qGaussianVarianceOption,
           trainOption,
           iterationsOption,
           testOption,
@@ -236,7 +247,6 @@ public class SimpleTaggerWithConstraints
    * @param var Gaussian prior variance
    * @return the trained model
    */
-  /*
   public static CRF trainPR(InstanceList training, InstanceList testing,
       ArrayList<PRConstraint> constraints, CRF crf,
       TransducerEvaluator eval, int iterations, double var) {
@@ -249,12 +259,11 @@ public class SimpleTaggerWithConstraints
     
     CRFTrainerByPR trainer = new CRFTrainerByPR(crf,constraints,numThreads.value);
     trainer.addEvaluator(eval);
-    trainer.setPGpv(var);
-    trainer.train(training,iterations);
+    trainer.setPGaussianPriorVariance(var);
+    trainer.train(training,iterations,iterations);
 
     return crf;
   }
-  */
   
   public static CRF getCRF(InstanceList training, int[] orders, String defaultLabel, String forbidden, String allowed, boolean connected) { 
     Pattern forbiddenPat = Pattern.compile(forbidden);
@@ -566,24 +575,32 @@ public class SimpleTaggerWithConstraints
             crf, eval, iterationsOption.value, gaussianVarianceOption.value, numResets.value);
       }
       else if (learningOption.value.equalsIgnoreCase("pr")) {
-        throw new RuntimeException("In development");
-        /*
         ArrayList<PRConstraint> constraintsList = new  ArrayList<PRConstraint>();
-        if (lossOption.value.equalsIgnoreCase("l2")) {
-          OneLabelL2PRConstraints geConstraints = new OneLabelL2PRConstraints(true);
+        if (penaltyOption.value.equalsIgnoreCase("l2")) {
+          OneLabelL2IndPRConstraints prConstraints = new OneLabelL2IndPRConstraints(true);
+          
           for (int fi : constraints.keySet()) {
-            geConstraints.addConstraint(fi, constraints.get(fi), 100);
+            double[][] dist = constraints.get(fi);
+            for (int li = 0; li < dist.length; li++) {
+              if (!Double.isInfinite(dist[li][0]) && !Maths.almostEquals(dist[li][0],dist[li][1])) {
+                throw new RuntimeException("Support for range constraints in PR in development. "
+                  + penaltyOption.value);
+              }
+              
+              if (!Double.isInfinite(dist[li][0])) {
+                prConstraints.addConstraint(fi, li, dist[li][0], qGaussianVarianceOption.value);
+              }
+            }
           }
-          constraintsList.add(geConstraints);
+          constraintsList.add(prConstraints);
         }
-        else if (lossOption.value.equalsIgnoreCase("kl")) {
-          throw new RuntimeException("KL divergence currently not supported for PR.");
+        else if (penaltyOption.value.equalsIgnoreCase("kl")) {
+          throw new RuntimeException("KL divergence not supported for PR.");
         }
         else {
-          throw new RuntimeException("Unknown loss " + lossOption.value);
+          throw new RuntimeException("Unknown penalty " + penaltyOption.value);
         }
         crf = trainPR(trainingData, testData, constraintsList, crf, eval, iterationsOption.value, gaussianVarianceOption.value);
-        */
       }
       else {
         throw new RuntimeException("Unknown learning algorithm " + learningOption.value);

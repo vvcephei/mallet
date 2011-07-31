@@ -15,6 +15,7 @@ import java.util.logging.Logger;
 import cc.mallet.classify.constraints.ge.MaxEntGEConstraint;
 import cc.mallet.classify.constraints.ge.MaxEntKLFLGEConstraints;
 import cc.mallet.classify.constraints.ge.MaxEntL2FLGEConstraints;
+import cc.mallet.classify.constraints.ge.MaxEntRangeL2FLGEConstraints;
 import cc.mallet.optimize.LimitedMemoryBFGS;
 import cc.mallet.optimize.Optimizable;
 import cc.mallet.optimize.Optimizer;
@@ -36,14 +37,13 @@ import cc.mallet.util.MalletProgressMessageLogger;
  * Better explanations of parameters is given in MaxEntOptimizableByGE
  */
 
-public class MaxEntGETrainer extends ClassifierTrainer<MaxEnt> implements ClassifierTrainer.ByOptimization<MaxEnt>, Boostable, Serializable {
+public class MaxEntGERangeTrainer extends ClassifierTrainer<MaxEnt> implements ClassifierTrainer.ByOptimization<MaxEnt>, Boostable, Serializable {
 
   private static final long serialVersionUID = 1L;
-  private static Logger logger = MalletLogger.getLogger(MaxEntGETrainer.class.getName());
-  private static Logger progressLogger = MalletProgressMessageLogger.getLogger(MaxEntGETrainer.class.getName()+"-pl");
+  private static Logger logger = MalletLogger.getLogger(MaxEntGERangeTrainer.class.getName());
+  private static Logger progressLogger = MalletProgressMessageLogger.getLogger(MaxEntGERangeTrainer.class.getName()+"-pl");
 
   // these are for using this code from the command line
-  private boolean l2 = false;
   private boolean normalize = true;
   private boolean useValues = false;
   private String constraintsFile;
@@ -59,13 +59,13 @@ public class MaxEntGETrainer extends ClassifierTrainer<MaxEnt> implements Classi
   private MaxEntOptimizableByGE ge = null;
   private Optimizer opt = null;
 
-  public MaxEntGETrainer() {}
+  public MaxEntGERangeTrainer() {}
   
-  public MaxEntGETrainer(ArrayList<MaxEntGEConstraint> constraints) {
+  public MaxEntGERangeTrainer(ArrayList<MaxEntGEConstraint> constraints) {
     this.constraints = constraints;
   }
   
-  public MaxEntGETrainer(ArrayList<MaxEntGEConstraint> constraints, MaxEnt classifier) {
+  public MaxEntGERangeTrainer(ArrayList<MaxEntGEConstraint> constraints, MaxEnt classifier) {
     this.constraints = constraints;
     this.classifier = classifier;
   }
@@ -88,10 +88,6 @@ public class MaxEntGETrainer extends ClassifierTrainer<MaxEnt> implements Classi
 
   public void setUseValues(boolean flag) {
     this.useValues = flag;
-  }
-  
-  public void setL2(boolean flag) {
-    l2 = flag;
   }
   
   public void setNormalize(boolean normalize) {
@@ -140,28 +136,23 @@ public class MaxEntGETrainer extends ClassifierTrainer<MaxEnt> implements Classi
     trainingList = train;
 
     if (constraints == null && constraintsFile != null) {
-      HashMap<Integer,double[]> constraintsMap = 
-        FeatureConstraintUtil.readConstraintsFromFile(constraintsFile, trainingList);
+      HashMap<Integer,double[][]> constraintsMap = 
+        FeatureConstraintUtil.readRangeConstraintsFromFile(constraintsFile, trainingList);
 
       logger.info("number of constraints: " + constraintsMap.size());
       constraints = new ArrayList<MaxEntGEConstraint>();
-      if (l2) {
-        MaxEntL2FLGEConstraints geConstraints = new MaxEntL2FLGEConstraints(train.getDataAlphabet().size(),
-            train.getTargetAlphabet().size(),useValues,normalize);
-        for (int fi : constraintsMap.keySet()) {
-          geConstraints.addConstraint(fi, constraintsMap.get(fi), 1);
+
+      MaxEntRangeL2FLGEConstraints geConstraints = new MaxEntRangeL2FLGEConstraints(train.getDataAlphabet().size(),
+        train.getTargetAlphabet().size(),useValues,normalize);
+      for (int fi : constraintsMap.keySet()) {
+        double[][] dist = constraintsMap.get(fi);
+        for (int li = 0; li < dist.length; li++) {
+          if (!Double.isInfinite(dist[li][0])) {
+            geConstraints.addConstraint(fi, li, dist[li][0], dist[li][1], 1);
+          }
         }
-        constraints.add(geConstraints);
       }
-      else {
-        MaxEntKLFLGEConstraints geConstraints = new MaxEntKLFLGEConstraints(train.getDataAlphabet().size(),
-            train.getTargetAlphabet().size(),useValues);
-        for (int fi : constraintsMap.keySet()) {
-          geConstraints.addConstraint(fi, constraintsMap.get(fi), 1);
-        }
-        constraints = new ArrayList<MaxEntGEConstraint>();
-        constraints.add(geConstraints);
-      }
+      constraints.add(geConstraints);
     }
     
     getOptimizable(trainingList);
