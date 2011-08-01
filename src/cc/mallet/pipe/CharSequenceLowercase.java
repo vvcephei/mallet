@@ -22,8 +22,8 @@ public class CharSequenceLowercase extends Pipe implements Serializable {
 	
 	public Instance pipe (Instance carrier) {
 
-		if (carrier.getData() instanceof String) {
-			String data = (String) carrier.getData();
+		if (carrier.getData() instanceof String || carrier.getData() instanceof StringBuffer) {
+			String data = carrier.getData().toString();
 			carrier.setData(data.toLowerCase());
 		}
 		else {
