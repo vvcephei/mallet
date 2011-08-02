@@ -133,6 +133,10 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 
     }
 
+    /**
+     * added by JTR to facilitate reporting.
+     * @return
+     */
     public List<TopicModelResult> getDocumentTopics(){
         List<TopicModelResult> result = new ArrayList<TopicModelResult>();
         int docLen;
@@ -176,6 +180,14 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 		return ret;
 	}
 
+    /**
+     * Added by JTR to abstract all the setup required to initialize the PTM.
+     * The reason for this is that the constructor I added can't make use of
+     * the main constructor below.
+     * @param topicAlphabet
+     * @param alphaSum
+     * @param beta
+     */
     private void setupPTM(LabelAlphabet topicAlphabet, double alphaSum, double beta){
         this.data = new ArrayList<TopicAssignment>();
 		this.topicAlphabet = topicAlphabet;
@@ -476,7 +488,6 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 		}
 	}
 
-
 	public void sumTypeTopicCounts (WorkerRunnable[] runnables) {
 
 		// Clear the topic totals
@@ -760,8 +771,6 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 
 	}
 
-
-
     public void estimate () throws IOException {
 
 		long startTime = System.currentTimeMillis();
@@ -985,13 +994,6 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 		logger.info(timeReport.toString());
 	}
 
-	public void printTopWords (File file, int numWords, boolean useNewLines) throws IOException {
-		PrintStream out = new PrintStream (file);
-		printTopWords(out, numWords, useNewLines);
-		out.close();
-	}
-
-
 	/**
 	 *  Return an array of sorted sets (one set per topic). Each set
 	 *   contains IDSorter objects with integer keys into the alphabet.
@@ -1033,7 +1035,6 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 	 *
 	 *  @param numWords The maximum length of each topic's array of words (may be less).
 	 */
-
 	public Object[][] getTopWords(int numWords) {
 
 		ArrayList<TreeSet<IDSorter>> topicSortedWords = getSortedWords();
@@ -1059,6 +1060,12 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 
 		return result;
 	}
+
+    public void printTopWords (File file, int numWords, boolean useNewLines) throws IOException {
+        PrintStream out = new PrintStream (file);
+        printTopWords(out, numWords, useNewLines);
+        out.close();
+    }
 
 	public void printTopWords (PrintStream out, int numWords, boolean usingNewLines) {
 		out.print(displayTopWords(numWords, usingNewLines));
@@ -1245,8 +1252,6 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 		out.println("</topics>");
 	}
 
-
-
 	/**
 	 *  Write the internal representation of type-topic counts
 	 *   (count/topic pairs in descending order by count) to a file.
@@ -1277,12 +1282,6 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 			out.println(buffer);
 		}
 
-		out.close();
-	}
-
-	public void printTopicWordWeights(File file) throws IOException {
-		PrintWriter out = new PrintWriter (new FileWriter (file) );
-		printTopicWordWeights(out);
 		out.close();
 	}
 
@@ -1320,6 +1319,34 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 			}
 		}
 	}
+
+    public void printTopicWordWeights(File file) throws IOException {
+        PrintWriter out = new PrintWriter (new FileWriter (file) );
+        printTopicWordWeights(out);
+        out.close();
+    }
+
+    /**
+     * Get the topic distribution from the entire training set
+     */
+    public double[] getTopicProbabilities(){
+        double[] result = null;
+        for (TopicAssignment topicAssignment: data){
+            LabelSequence topicSequence = topicAssignment.topicSequence;
+            double[] temp =getTopicProbabilities(topicSequence);
+            if (result == null){
+                result = temp;
+            } else {
+                for (int i = 0; i<result.length; i++){
+                    result[i] += temp[i];
+                }
+            }
+        }
+        for (int i = 0; i<result.length; i++){
+            result[i] /= result.length;
+        }
+        return result;
+    }
 
 	/** Get the smoothed distribution over topics for a training instance.
 	 */
@@ -1478,22 +1505,24 @@ public class ParallelTopicModel implements Serializable, TopicModel {
 		}
 	}
 
+    /**
+     * The likelihood of the model is a combination of a
+		Dirichlet-multinomial for the words in each topic
+		and a Dirichlet-multinomial for the topics in each
+		document.
+
+		The likelihood function of a dirichlet multinomial is
+			 Gamma( sum_i alpha_i )	 prod_i Gamma( alpha_i + N_i )
+			prod_i Gamma( alpha_i )	  Gamma( sum_i (alpha_i + N_i) )
+
+		So the log likelihood is
+			logGamma ( sum_i alpha_i ) - logGamma ( sum_i (alpha_i + N_i) ) +
+			 sum_i [ logGamma( alpha_i + N_i) - logGamma( alpha_i ) ]
+     * @return
+     */
 	public double modelLogLikelihood() {
 		double logLikelihood = 0.0;
 		int nonZeroTopics;
-
-		// The likelihood of the model is a combination of a
-		// Dirichlet-multinomial for the words in each topic
-		// and a Dirichlet-multinomial for the topics in each
-		// document.
-
-		// The likelihood function of a dirichlet multinomial is
-		//	 Gamma( sum_i alpha_i )	 prod_i Gamma( alpha_i + N_i )
-		//	prod_i Gamma( alpha_i )	  Gamma( sum_i (alpha_i + N_i) )
-
-		// So the log likelihood is
-		//	logGamma ( sum_i alpha_i ) - logGamma ( sum_i (alpha_i + N_i) ) +
-		//	 sum_i [ logGamma( alpha_i + N_i) - logGamma( alpha_i ) ]
 
 		// Do the documents first
 
