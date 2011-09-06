@@ -1,4 +1,5 @@
 /* Copyright (C) 2002 Univ. of Massachusetts Amherst, Computer Science Dept.
+/* Copyright (C) 2002 Univ. of Massachusetts Amherst, Computer Science Dept.
    This file is part of "MALLET" (MAchine Learning for LanguagE Toolkit).
    http://www.cs.umass.edu/~mccallum/mallet
    This software is provided under the terms of the Common Public License,
@@ -143,7 +144,7 @@ public class Dirichlet {
 
 	/** A symmetric dirichlet: E(X_i) = E(X_j) for all i, j 
 	 * 
-	 * @param n The number of dimensions
+	 * @param size The number of dimensions
 	 * @param alpha The parameter for each dimension
 	 */
 	public Dirichlet (int size, double alpha)
