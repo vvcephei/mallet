@@ -8,7 +8,7 @@
 package cc.mallet.topics;
 
 
-import java.util.Arrays;
+import java.util.*;
 import java.io.*;
 
 import cc.mallet.types.*;
@@ -20,7 +20,7 @@ import cc.mallet.util.Randoms;
  * based on C code by Xuerui Wang.
  */
 
-public class TopicalNGrams {
+public class TopicalNGrams implements TopicModel{
 
 	int numTopics;
 	Alphabet uniAlphabet;
@@ -585,4 +585,38 @@ public class TopicalNGrams {
 		tng.printTopWords (60, true);
 	}
 
+    private InstanceList _instanceList;
+    private int _numIterations;
+    public static final String NUM_ITERATIONS = "NUM_ITERATIONS";
+    private int _showTopicsInterval;
+    public static final String SHOW_TOPICS_INTERVAL = "SHOW_TOPICS_INTERVAL";
+    private int _outputModelInterval;
+    public static final String OUTPUT_MODEL_INTERVAL = "OUTPUT_MODEL_INTERVAL";
+    private String _outputModelFilename;
+    public static final String OUTPUT_MODEL_FILENAME = "OUTPUT_MODEL_FILENAME";
+
+    public void estimate() throws IOException {
+        estimate (_instanceList, _numIterations, _showTopicsInterval,
+                        _outputModelInterval, _outputModelFilename,
+                        new Randoms());
+    }
+
+    public void addInstances(InstanceList instances) {
+        _instanceList = instances;
+    }
+
+    public void setParams(Map params) {
+        _numIterations = (Integer) params.get(NUM_ITERATIONS);
+        _showTopicsInterval = (Integer) params.get(SHOW_TOPICS_INTERVAL);
+        _outputModelInterval = (Integer) params.get(OUTPUT_MODEL_INTERVAL);
+        _outputModelFilename = (String) params.get(OUTPUT_MODEL_FILENAME);
+    }
+
+    public List<TopicModelResult> getDocumentTopics() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
+
+    public ArrayList<TreeSet<IDSorter>> getSortedWords() {
+        return null;  //To change body of implemented methods use File | Settings | File Templates.
+    }
 }
