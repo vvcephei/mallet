@@ -59,33 +59,6 @@ public class WorkerRunnable implements Callable {
     boolean shouldBuildLocalCounts = true;
 
     protected Randoms random;
-    public WorkerRunnable(ArrayList<TopicAssignment> data, int startDoc, int numDocs, int numTopics, int topicMask,
-                          int topicBits, int numTypes, double[] alpha, double alphaSum, double beta, double betaSum,
-                          double smooothingOnlyMass, double[] cachesCoefficients, int[][] typeTopicCounts,
-                          int[] tokensPerTopic, int[] docLenthCounts, int[][] topicDocCounts, boolean shouldSaveState,
-                          boolean shouldBuildLocalCounts, Randoms randoms){
-        this.data = data;
-        this.startDoc = startDoc;
-        this.numDocs = numDocs;
-        this.numTopics = numTopics;
-        this.topicMask = topicMask;
-        this.topicBits = topicBits;
-        this.numTypes = numTypes;
-        this.alpha = alpha;
-        this.alphaSum = alphaSum;
-        this.beta = beta;
-        this.betaSum = betaSum;
-        this.smoothingOnlyMass = smooothingOnlyMass;
-        this.cachedCoefficients = cachesCoefficients;
-        this.typeTopicCounts = typeTopicCounts;
-        this.tokensPerTopic = tokensPerTopic;
-        this.docLengthCounts = docLenthCounts;
-        this.topicDocCounts = topicDocCounts;
-        this.shouldSaveState = shouldSaveState;
-        this.shouldBuildLocalCounts = shouldBuildLocalCounts;
-        this.random = randoms;
-    }
-
 
     public WorkerRunnable(int numTopics,
                           double[] alpha, double alphaSum,
@@ -451,6 +424,8 @@ public class WorkerRunnable implements Callable {
                 //  normalizing constants.
                 smoothingOnlyMass += alpha[oldTopic] * beta /
                         (tokensPerTopic[oldTopic] + betaSum);
+                if (smoothingOnlyMass < 0)
+                    assert false;
                 topicBetaMass += beta * localTopicCounts[oldTopic] /
                         (tokensPerTopic[oldTopic] + betaSum);
 
@@ -518,6 +493,10 @@ public class WorkerRunnable implements Callable {
             }
 
             double sample = random.nextUniform() * (smoothingOnlyMass + topicBetaMass + topicTermMass);
+            assert smoothingOnlyMass >=0: "smoothingOnlyMass was negative";
+            assert topicBetaMass >=0: "topicBetaMass was negative";
+            assert topicTermMass >=0: "topicTermMass was negative";
+            assert sample>=0: "sample was negative";
             double origSample = sample;
 
             //	Make sure it actually gets set
@@ -533,6 +512,9 @@ public class WorkerRunnable implements Callable {
                     sample -= topicTermScores[i];
                 }
 
+                if ( i== -1){
+                    assert i != -1;
+                }
                 newTopic = currentTypeTopicCounts[i] & topicMask;
                 currentValue = currentTypeTopicCounts[i] >> topicBits;
 

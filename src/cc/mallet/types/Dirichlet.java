@@ -627,6 +627,7 @@ Bernoulli numbers. */
 
 			// Bayesian estimation Part I
 			denominator -= 1/scale;
+            assert denominator > 0: "denominator was negative";
 
 			// Calculate the individual parameters
 
@@ -636,6 +637,7 @@ Bernoulli numbers. */
 
 				// What's the largest non-zero element in the histogram?
 				nonZeroLimit = nonZeroLimits[k];
+
 
 				oldParametersK = parameters[k];
 				parameters[k] = 0;
@@ -652,6 +654,7 @@ Bernoulli numbers. */
 				parameters[k] = (oldParametersK * parameters[k] + shape) / denominator;
 
 				parametersSum += parameters[k];
+                
 			}
 		}
 

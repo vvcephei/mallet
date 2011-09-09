@@ -688,11 +688,14 @@ public class ParallelTopicModel implements Serializable, TopicModel {
                     docLengthCounts,
                     numTopics,
                     alphaSum);
+            assert alphaSum >= 0: "alphasum was negative in PTM";
             for (int topic = 0; topic < numTopics; topic++) {
                 alpha[topic] = alphaSum / numTopics;
+                System.err.println(Arrays.toString(alpha));
             }
         } else {
             alphaSum = Dirichlet.learnParameters(alpha, topicDocCounts, docLengthCounts, 1.001, 1.0, 1);
+            assert alphaSum >= 0: "alphasum was negative in PTM";
         }
     }
 
